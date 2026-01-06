@@ -220,118 +220,67 @@ class Apple1:
 
     def interactive(self):
         """
-        Run the emulator in interactive mode with keyboard input.
-        Works on both Windows and Unix/Linux/macOS.
+        Run the emulator in interactive line-based mode.
+        Type a line and press Enter to send it to the Apple I.
+        Works on all platforms (Windows, Linux, macOS).
         """
-        import platform
-
-        if platform.system() == 'Windows':
-            self._interactive_windows()
-        else:
-            self._interactive_unix()
-
-    def _interactive_windows(self):
-        """Interactive mode for Windows using msvcrt."""
-        import msvcrt
+        import threading
 
         self.running = True
-        cycles = 0
-        last_key_time = 0
-        key_delay = 0.05  # 50ms debounce delay between key presses
+        input_queue = []
+        input_lock = threading.Lock()
 
-        print("\nApple I Emulator - Press Ctrl+C to exit\n")
+        def input_thread():
+            """Thread to read input lines."""
+            while self.running:
+                try:
+                    line = input()
+                    with input_lock:
+                        # Add each character plus CR at the end
+                        for char in line:
+                            input_queue.append(ord(char))
+                        input_queue.append(0x0D)  # Carriage return
+                except EOFError:
+                    break
+                except Exception:
+                    break
+
+        print("\nApple I Emulator")
+        print("=" * 40)
+        print("Type commands and press Enter to send to Apple I.")
+        print("Type 'quit' or press Ctrl+C to exit.")
         print("=" * 40)
 
+        # Start input thread
+        reader = threading.Thread(target=input_thread, daemon=True)
+        reader.start()
+
+        # Run initial cycles to display the prompt
+        for _ in range(10000):
+            self.step()
+
         try:
             while self.running:
-                current_time = time.time()
-
-                # Check for keyboard input (non-blocking on Windows)
-                if msvcrt.kbhit():
-                    char = msvcrt.getch()
-                    # Handle special keys
-                    if char == b'\x03':  # Ctrl+C
-                        break
-
-                    # Only accept key if enough time has passed (debounce)
-                    # and PIA is ready
-                    if (current_time - last_key_time >= key_delay and
-                            not self.pia._key_ready):
-                        if char == b'\r':  # Enter -> CR
-                            self.pia.key_press(0x0D)
-                        elif char == b'\x08':  # Backspace
-                            self.pia.key_press(0x08)
-                        elif len(char) == 1:
-                            self.pia.key_press(char[0])
-                        last_key_time = current_time
+                # Check for input from the queue
+                with input_lock:
+                    if input_queue and not self.pia._key_ready:
+                        char = input_queue.pop(0)
+                        self.pia.key_press(char)
 
                 # Process PIA keyboard buffer
                 self.pia.poll_keyboard()
 
-                # Execute CPU
-                cycles += self.step()
+                # Execute CPU - run more cycles between checks
+                for _ in range(1000):
+                    self.step()
 
-                # Throttle
-                if cycles >= self._cycles_per_frame:
-                    cycles = 0
-                    time.sleep(1 / 1000)  # Small delay
-
-        except KeyboardInterrupt:
-            pass
-        finally:
-            print("\n\nEmulator stopped")
-
-    def _interactive_unix(self):
-        """Interactive mode for Unix/Linux/macOS using termios."""
-        import select
-        import tty
-        import termios
-
-        # Set up terminal for raw input
-        fd = sys.stdin.fileno()
-        old_settings = termios.tcgetattr(fd)
-
-        try:
-            tty.setcbreak(fd)
-            self.running = True
-            cycles = 0
-            last_key_time = 0
-            key_delay = 0.05  # 50ms debounce delay
-
-            print("\nApple I Emulator - Press Ctrl+C to exit\n")
-            print("=" * 40)
-
-            while self.running:
-                current_time = time.time()
-
-                # Check for keyboard input
-                if select.select([sys.stdin], [], [], 0)[0]:
-                    char = sys.stdin.read(1)
-                    if char:
-                        # Handle special keys
-                        if ord(char) == 3:  # Ctrl+C
-                            break
-                        # Only accept key if enough time has passed and PIA is ready
-                        if (current_time - last_key_time >= key_delay and
-                                not self.pia._key_ready):
-                            self.pia.key_press(ord(char))
-                            last_key_time = current_time
-
-                # Process PIA keyboard buffer
-                self.pia.poll_keyboard()
-
-                # Execute CPU
-                cycles += self.step()
-
-                # Throttle
-                if cycles >= self._cycles_per_frame:
-                    cycles = 0
-                    time.sleep(1 / 1000)  # Small delay
+                # Small delay to prevent busy-waiting
+                time.sleep(0.001)
 
         except KeyboardInterrupt:
             pass
         finally:
-            termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
+            self.running = False
             print("\n\nEmulator stopped")
 
     def run_simple(self, input_string: str = "", max_cycles: int = 100_000) -> str:
