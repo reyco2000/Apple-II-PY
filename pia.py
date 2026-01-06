@@ -333,7 +333,13 @@ class Apple1PIA:
 
         elif reg == 2:  # Display data
             if self.pia.CRB & 0x04:
-                return self.pia.ORB
+                # Return ORB with display ready flag in bit 7
+                # Bit 7 CLEAR = ready, Bit 7 SET = busy
+                # (Woz Monitor loops with BMI while bit 7 is set)
+                value = self.pia.ORB & 0x7F
+                if not self._display_ready:
+                    value |= 0x80  # Set bit 7 when NOT ready (busy)
+                return value
             else:
                 return self.pia.DDRB
 
