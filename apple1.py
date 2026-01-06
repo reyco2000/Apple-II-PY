@@ -243,7 +243,8 @@ class Apple1:
         try:
             while self.running:
                 # Check for keyboard input (non-blocking on Windows)
-                if msvcrt.kbhit():
+                # Only accept new key if PIA is ready (previous key was processed)
+                if msvcrt.kbhit() and not self.pia._key_ready:
                     char = msvcrt.getch()
                     # Handle special keys
                     if char == b'\x03':  # Ctrl+C
@@ -254,6 +255,9 @@ class Apple1:
                         self.pia.key_press(0x08)
                     elif len(char) == 1:
                         self.pia.key_press(char[0])
+                elif msvcrt.kbhit():
+                    # Consume and discard key if PIA is busy
+                    msvcrt.getch()
 
                 # Process PIA keyboard buffer
                 self.pia.poll_keyboard()
@@ -291,13 +295,16 @@ class Apple1:
 
             while self.running:
                 # Check for keyboard input
+                # Only accept new key if PIA is ready (previous key was processed)
                 if select.select([sys.stdin], [], [], 0)[0]:
                     char = sys.stdin.read(1)
                     if char:
                         # Handle special keys
                         if ord(char) == 3:  # Ctrl+C
                             break
-                        self.pia.key_press(ord(char))
+                        # Only send to PIA if ready
+                        if not self.pia._key_ready:
+                            self.pia.key_press(ord(char))
 
                 # Process PIA keyboard buffer
                 self.pia.poll_keyboard()
