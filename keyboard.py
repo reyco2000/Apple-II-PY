@@ -8,7 +8,6 @@ The Apple I keyboard was uppercase only and used CR (not LF) for newlines.
 """
 
 import sys
-import select
 from typing import Optional, Callable, List
 from abc import ABC, abstractmethod
 
@@ -75,32 +74,38 @@ class TerminalKeyboard(Keyboard):
     """
     Terminal-based keyboard using stdin.
     Supports both blocking and non-blocking modes.
+    Works on both Windows and Unix/Linux/macOS.
     """
 
     def __init__(self, blocking: bool = False):
         self._blocking = blocking
         self._buffer: List[int] = []
         self._old_settings = None
+        self._is_windows = sys.platform == 'win32'
 
     def _setup_terminal(self):
         """Set up terminal for raw input."""
+        if self._is_windows:
+            return  # No setup needed on Windows
         try:
             import tty
             import termios
             fd = sys.stdin.fileno()
             self._old_settings = termios.tcgetattr(fd)
             tty.setcbreak(fd)
-        except (ImportError, termios.error):
+        except (ImportError, AttributeError):
             pass
 
     def _restore_terminal(self):
         """Restore terminal settings."""
+        if self._is_windows:
+            return  # No restore needed on Windows
         if self._old_settings:
             try:
                 import termios
                 fd = sys.stdin.fileno()
                 termios.tcsetattr(fd, termios.TCSADRAIN, self._old_settings)
-            except (ImportError, termios.error):
+            except (ImportError, AttributeError):
                 pass
 
     def get_key(self) -> Optional[int]:
@@ -109,7 +114,30 @@ class TerminalKeyboard(Keyboard):
         if self._buffer:
             return self._buffer.pop(0)
 
-        # Check stdin
+        if self._is_windows:
+            return self._get_key_windows()
+        else:
+            return self._get_key_unix()
+
+    def _get_key_windows(self) -> Optional[int]:
+        """Get key on Windows using msvcrt."""
+        try:
+            import msvcrt
+            if self._blocking:
+                char = msvcrt.getch()
+                if char:
+                    return self._convert_key(char[0])
+            else:
+                if msvcrt.kbhit():
+                    char = msvcrt.getch()
+                    if char:
+                        return self._convert_key(char[0])
+        except ImportError:
+            pass
+        return None
+
+    def _get_key_unix(self) -> Optional[int]:
+        """Get key on Unix using select."""
         if self._blocking:
             char = sys.stdin.read(1)
             if char:
@@ -120,16 +148,23 @@ class TerminalKeyboard(Keyboard):
                 char = sys.stdin.read(1)
                 if char:
                     return self._convert_key(ord(char))
-
         return None
 
     def _key_available(self) -> bool:
-        """Check if a key is available (Unix only)."""
-        try:
-            readable, _, _ = select.select([sys.stdin], [], [], 0)
-            return bool(readable)
-        except (ValueError, OSError):
-            return False
+        """Check if a key is available."""
+        if self._is_windows:
+            try:
+                import msvcrt
+                return msvcrt.kbhit()
+            except ImportError:
+                return False
+        else:
+            try:
+                import select
+                readable, _, _ = select.select([sys.stdin], [], [], 0)
+                return bool(readable)
+            except (ValueError, OSError):
+                return False
 
     def has_key(self) -> bool:
         """Check if a key is available."""

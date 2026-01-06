@@ -221,7 +221,58 @@ class Apple1:
     def interactive(self):
         """
         Run the emulator in interactive mode with keyboard input.
+        Works on both Windows and Unix/Linux/macOS.
         """
+        import platform
+
+        if platform.system() == 'Windows':
+            self._interactive_windows()
+        else:
+            self._interactive_unix()
+
+    def _interactive_windows(self):
+        """Interactive mode for Windows using msvcrt."""
+        import msvcrt
+
+        self.running = True
+        cycles = 0
+
+        print("\nApple I Emulator - Press Ctrl+C to exit\n")
+        print("=" * 40)
+
+        try:
+            while self.running:
+                # Check for keyboard input (non-blocking on Windows)
+                if msvcrt.kbhit():
+                    char = msvcrt.getch()
+                    # Handle special keys
+                    if char == b'\x03':  # Ctrl+C
+                        break
+                    if char == b'\r':  # Enter -> CR
+                        self.pia.key_press(0x0D)
+                    elif char == b'\x08':  # Backspace
+                        self.pia.key_press(0x08)
+                    elif len(char) == 1:
+                        self.pia.key_press(char[0])
+
+                # Process PIA keyboard buffer
+                self.pia.poll_keyboard()
+
+                # Execute CPU
+                cycles += self.step()
+
+                # Throttle
+                if cycles >= self._cycles_per_frame:
+                    cycles = 0
+                    time.sleep(1 / 1000)  # Small delay
+
+        except KeyboardInterrupt:
+            pass
+        finally:
+            print("\n\nEmulator stopped")
+
+    def _interactive_unix(self):
+        """Interactive mode for Unix/Linux/macOS using termios."""
         import select
         import tty
         import termios
