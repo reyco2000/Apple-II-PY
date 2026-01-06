@@ -236,28 +236,34 @@ class Apple1:
 
         self.running = True
         cycles = 0
+        last_key_time = 0
+        key_delay = 0.05  # 50ms debounce delay between key presses
 
         print("\nApple I Emulator - Press Ctrl+C to exit\n")
         print("=" * 40)
 
         try:
             while self.running:
+                current_time = time.time()
+
                 # Check for keyboard input (non-blocking on Windows)
-                # Only accept new key if PIA is ready (previous key was processed)
-                if msvcrt.kbhit() and not self.pia._key_ready:
+                if msvcrt.kbhit():
                     char = msvcrt.getch()
                     # Handle special keys
                     if char == b'\x03':  # Ctrl+C
                         break
-                    if char == b'\r':  # Enter -> CR
-                        self.pia.key_press(0x0D)
-                    elif char == b'\x08':  # Backspace
-                        self.pia.key_press(0x08)
-                    elif len(char) == 1:
-                        self.pia.key_press(char[0])
-                elif msvcrt.kbhit():
-                    # Consume and discard key if PIA is busy
-                    msvcrt.getch()
+
+                    # Only accept key if enough time has passed (debounce)
+                    # and PIA is ready
+                    if (current_time - last_key_time >= key_delay and
+                            not self.pia._key_ready):
+                        if char == b'\r':  # Enter -> CR
+                            self.pia.key_press(0x0D)
+                        elif char == b'\x08':  # Backspace
+                            self.pia.key_press(0x08)
+                        elif len(char) == 1:
+                            self.pia.key_press(char[0])
+                        last_key_time = current_time
 
                 # Process PIA keyboard buffer
                 self.pia.poll_keyboard()
@@ -289,22 +295,27 @@ class Apple1:
             tty.setcbreak(fd)
             self.running = True
             cycles = 0
+            last_key_time = 0
+            key_delay = 0.05  # 50ms debounce delay
 
             print("\nApple I Emulator - Press Ctrl+C to exit\n")
             print("=" * 40)
 
             while self.running:
+                current_time = time.time()
+
                 # Check for keyboard input
-                # Only accept new key if PIA is ready (previous key was processed)
                 if select.select([sys.stdin], [], [], 0)[0]:
                     char = sys.stdin.read(1)
                     if char:
                         # Handle special keys
                         if ord(char) == 3:  # Ctrl+C
                             break
-                        # Only send to PIA if ready
-                        if not self.pia._key_ready:
+                        # Only accept key if enough time has passed and PIA is ready
+                        if (current_time - last_key_time >= key_delay and
+                                not self.pia._key_ready):
                             self.pia.key_press(ord(char))
+                            last_key_time = current_time
 
                 # Process PIA keyboard buffer
                 self.pia.poll_keyboard()
