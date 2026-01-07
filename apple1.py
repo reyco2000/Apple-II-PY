@@ -224,64 +224,74 @@ class Apple1:
         Type a line and press Enter to send it to the Apple I.
         Works on all platforms (Windows, Linux, macOS).
         """
-        import threading
+        from display import ScreenBuffer
 
-        self.running = True
-        input_queue = []
-        input_lock = threading.Lock()
-
-        def input_thread():
-            """Thread to read input lines."""
-            while self.running:
-                try:
-                    line = input()
-                    with input_lock:
-                        # Add each character plus CR at the end
-                        for char in line:
-                            input_queue.append(ord(char))
-                        input_queue.append(0x0D)  # Carriage return
-                except EOFError:
-                    break
-                except Exception:
-                    break
+        # Use a screen buffer to capture output
+        output_buffer = ScreenBuffer()
+        self.pia.set_display_callback(lambda c: output_buffer.write(c))
 
         print("\nApple I Emulator")
         print("=" * 40)
-        print("Type commands and press Enter to send to Apple I.")
-        print("Type 'quit' or press Ctrl+C to exit.")
+        print("Commands: Type Woz Monitor commands and press Enter")
+        print("  FF00     - Examine memory at $FF00")
+        print("  300: A9  - Store $A9 at $0300")
+        print("  300R     - Run from $0300")
+        print("  quit     - Exit emulator")
         print("=" * 40)
 
-        # Start input thread
-        reader = threading.Thread(target=input_thread, daemon=True)
-        reader.start()
-
-        # Run initial cycles to display the prompt
-        for _ in range(10000):
+        # Initialize the Woz Monitor
+        for _ in range(5000):
             self.step()
 
         try:
-            while self.running:
-                # Check for input from the queue
-                with input_lock:
-                    if input_queue and not self.pia._key_ready:
-                        char = input_queue.pop(0)
-                        self.pia.key_press(char)
+            while True:
+                # Show output and prompt
+                output = output_buffer.get_output_log()
+                if output:
+                    # Print only new output, cleaning up display
+                    clean_output = output.replace('\r', '\n')
+                    print(clean_output, end='')
+                    output_buffer.clear()
 
-                # Process PIA keyboard buffer
-                self.pia.poll_keyboard()
+                # Show prompt
+                sys.stdout.write("\n> ")
+                sys.stdout.flush()
 
-                # Execute CPU - run more cycles between checks
-                for _ in range(1000):
+                # Get user input
+                try:
+                    line = input()
+                except EOFError:
+                    break
+
+                # Check for quit command
+                if line.lower() == 'quit':
+                    break
+
+                if not line.strip():
+                    continue
+
+                # Send input to Apple I character by character
+                for char in line.upper():
+                    self.pia.key_press(ord(char))
+                    # Run enough cycles for the character to be processed
+                    for _ in range(2000):
+                        self.step()
+                        if not self.pia._key_ready:
+                            break
+
+                # Send CR to execute command
+                self.pia.key_press(0x0D)
+
+                # Run cycles to process command
+                for _ in range(100000):
                     self.step()
-
-                # Small delay to prevent busy-waiting
-                time.sleep(0.001)
 
         except KeyboardInterrupt:
             pass
-        finally:
-            self.running = False
-            print("\n\nEmulator stopped")
+
+        # Restore display
+        self.pia.set_display_callback(lambda c: self.display.write(c))
+        print("\n\nEmulator stopped")
 
     def run_simple(self, input_string: str = "", max_cycles: int = 100_000) -> str:
         """
