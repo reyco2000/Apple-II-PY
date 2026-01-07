@@ -224,37 +224,38 @@ class Apple1:
         Type a line and press Enter to send it to the Apple I.
         Works on all platforms (Windows, Linux, macOS).
         """
-        from display import ScreenBuffer
-
-        # Use a screen buffer to capture output
-        output_buffer = ScreenBuffer()
-        self.pia.set_display_callback(lambda c: output_buffer.write(c))
-
         print("\nApple I Emulator")
         print("=" * 40)
         print("Commands: Type Woz Monitor commands and press Enter")
-        print("  FF00     - Examine memory at $FF00")
-        print("  300: A9  - Store $A9 at $0300")
-        print("  300R     - Run from $0300")
-        print("  quit     - Exit emulator")
+        print("  FF00        - Examine memory at $FF00")
+        print("  FF00.FF0F   - Examine range $FF00-$FF0F")
+        print("  300: A9 00  - Store bytes at $0300")
+        print("  300R        - Run from $0300")
+        print("  quit        - Exit emulator")
         print("=" * 40)
+        print()
 
-        # Initialize the Woz Monitor
-        for _ in range(5000):
+        # Collect output characters
+        output_chars = []
+
+        def collect_output(char):
+            output_chars.append(chr(char & 0x7F))
+
+        self.pia.set_display_callback(collect_output)
+
+        # Initialize the Woz Monitor - run until it's waiting for input
+        for _ in range(10000):
             self.step()
+
+        # Show initial prompt
+        if output_chars:
+            self._show_output(output_chars)
+            output_chars.clear()
 
         try:
             while True:
-                # Show output and prompt
-                output = output_buffer.get_output_log()
-                if output:
-                    # Print only new output, cleaning up display
-                    clean_output = output.replace('\r', '\n')
-                    print(clean_output, end='')
-                    output_buffer.clear()
-
                 # Show prompt
-                sys.stdout.write("\n> ")
+                sys.stdout.write("> ")
                 sys.stdout.flush()
 
                 # Get user input
@@ -273,8 +274,8 @@ class Apple1:
                 # Send input to Apple I character by character
                 for char in line.upper():
                     self.pia.key_press(ord(char))
-                    # Run enough cycles for the character to be processed
-                    for _ in range(2000):
+                    # Run until the key is processed
+                    for _ in range(5000):
                         self.step()
                         if not self.pia._key_ready:
                             break
@@ -282,16 +283,51 @@ class Apple1:
                 # Send CR to execute command
                 self.pia.key_press(0x0D)
 
-                # Run cycles to process command
-                for _ in range(100000):
+                # Run cycles to process command - stop when monitor is waiting for input
+                # The monitor waits at $FF29 (LDA $D011 / BPL loop)
+                cycles_without_output = 0
+                last_output_len = len(output_chars)
+                for _ in range(200000):
                     self.step()
+                    # Check if we got new output
+                    if len(output_chars) > last_output_len:
+                        last_output_len = len(output_chars)
+                        cycles_without_output = 0
+                    else:
+                        cycles_without_output += 1
+                    # Stop if no output for a while (monitor is waiting for input)
+                    if cycles_without_output > 5000:
+                        break
+
+                # Show output
+                if output_chars:
+                    self._show_output(output_chars)
+                    output_chars.clear()
 
         except KeyboardInterrupt:
             pass
 
         # Restore display
         self.pia.set_display_callback(lambda c: self.display.write(c))
-        print("\n\nEmulator stopped")
+        print("\nEmulator stopped")
+
+    def _show_output(self, chars):
+        """Format and show Apple I output."""
+        text = ''.join(chars)
+        # Convert CR to newline and clean up
+        lines = text.replace('\r', '\n').split('\n')
+        # Filter out empty lines and prompt-only lines
+        meaningful_lines = []
+        for line in lines:
+            stripped = line.strip()
+            # Skip empty lines and lines that are just the prompt character
+            if stripped and stripped != '\\':
+                meaningful_lines.append(line)
+        # Print meaningful lines
+        for line in meaningful_lines:
+            print(line)
+        if meaningful_lines:
+            print()  # Add blank line after output
 
     def run_simple(self, input_string: str = "", max_cycles: int = 100_000) -> str:
         """
