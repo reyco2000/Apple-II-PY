@@ -326,9 +326,11 @@ class Apple1PIA:
                 return self.pia.DDRA
 
         elif reg == 1:  # Keyboard control
-            value = self.pia.CRA
+            # Return CRA with bit 7 indicating key ready status
+            # Bit 7 must be CLEAR when no key is ready, SET when key is ready
+            value = self.pia.CRA & 0x7F  # Clear bit 7 first
             if self._key_ready:
-                value |= 0x80  # Set IRQ flag if key ready
+                value |= 0x80  # Set bit 7 only if key ready
             return value
 
         elif reg == 2:  # Display data
