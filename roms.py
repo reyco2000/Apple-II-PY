@@ -26,11 +26,11 @@ WOZ_MONITOR = _load_woz_monitor()
 
 # Apple I Integer BASIC ($E000-$EFFF)
 # Original Integer BASIC for the Apple I
-# Loaded from Apple-1 BASIC ROM.bin file
+# Loaded from basic.rom file
 
 def _load_basic() -> bytes:
-    """Load the Apple I BASIC ROM from Apple-1 BASIC ROM.bin file."""
-    rom_path = os.path.join(os.path.dirname(__file__), 'Apple-1 BASIC ROM.bin')
+    """Load the Apple I BASIC ROM from basic.rom file."""
+    rom_path = os.path.join(os.path.dirname(__file__), 'basic.rom')
     with open(rom_path, 'rb') as f:
         data = f.read(0x1000)  # Read up to 4KB ($E000-$EFFF)
     # Pad to 4KB if needed
