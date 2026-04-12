@@ -1,7 +1,7 @@
 # Apple I Emulator (Python)
 
 A Python implementation of the Apple I computer emulator.
-Inspired by [jscrane/Apple1](https://github.com/jscrane/Apple1).
+Inspired on [jscrane/Apple1](https://github.com/jscrane/Apple1).
 
 ## Overview
 
