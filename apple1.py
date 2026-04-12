@@ -70,6 +70,7 @@ class Apple1:
         self.debug = debug
         self.running = False
         self._cycles_per_frame = self.CLOCK_SPEED // 60  # Target 60 FPS
+        self._step_counter = 0
 
         # Initialize memory
         self.memory = Memory()
@@ -169,11 +170,13 @@ class Apple1:
         Returns:
             Number of cycles used
         """
-        # Process any keyboard input
-        if self.keyboard.has_key() and not self.pia._key_ready:
-            key = self.keyboard.get_key()
-            if key is not None:
-                self.pia.key_press(key)
+        # Process keyboard input throttled (every 256 CPU cycles) to reduce function call overhead
+        self._step_counter = (self._step_counter + 1) & 0xFF
+        if not self._step_counter and not self.pia._key_ready:
+            if self.keyboard.has_key():
+                key = self.keyboard.get_key()
+                if key is not None:
+                    self.pia.key_press(key)
 
         # Execute one instruction
         cycles = self.cpu.step()
@@ -231,6 +234,7 @@ class Apple1:
         print("  FF00.FF0F   - Examine range $FF00-$FF0F")
         print("  300: A9 00  - Store bytes at $0300")
         print("  300R        - Run from $0300")
+        print("  E000R       - Run BASIC (--basic needs to be used on startup)")
         print("  quit        - Exit emulator")
         print("=" * 40)
         print()
@@ -254,8 +258,7 @@ class Apple1:
 
         try:
             while True:
-                # Show prompt
-                sys.stdout.write("> ")
+                # Show prompt (Removed fake `> ` prompt as it confuses users with BASIC prompt)
                 sys.stdout.flush()
 
                 # Get user input
@@ -287,7 +290,7 @@ class Apple1:
                 # The monitor waits at $FF29 (LDA $D011 / BPL loop)
                 cycles_without_output = 0
                 last_output_len = len(output_chars)
-                for _ in range(200000):
+                for _ in range(500000):
                     self.step()
                     # Check if we got new output
                     if len(output_chars) > last_output_len:
@@ -296,7 +299,7 @@ class Apple1:
                     else:
                         cycles_without_output += 1
                     # Stop if no output for a while (monitor is waiting for input)
-                    if cycles_without_output > 5000:
+                    if cycles_without_output > 50000:
                         break
 
                 # Show output
@@ -313,21 +316,9 @@ class Apple1:
 
     def _show_output(self, chars):
         """Format and show Apple I output."""
-        text = ''.join(chars)
-        # Convert CR to newline and clean up
-        lines = text.replace('\r', '\n').split('\n')
-        # Filter out empty lines and prompt-only lines
-        meaningful_lines = []
-        for line in lines:
-            stripped = line.strip()
-            # Skip empty lines and lines that are just the prompt character
-            if stripped and stripped != '\\':
-                meaningful_lines.append(line)
-        # Print meaningful lines
-        for line in meaningful_lines:
-            print(line)
-        if meaningful_lines:
-            print()  # Add blank line after output
+        lines = [line.strip() for line in ''.join(chars).split('\r') if line.strip() not in ('', '\\')]
+        if lines:
+            print('\n'.join(lines) + '\n')
 
     def run_simple(self, input_string: str = "", max_cycles: int = 100_000) -> str:
         """
@@ -418,6 +409,10 @@ def main():
         '--test', action='store_true',
         help='Run in test mode (non-interactive)'
     )
+    parser.add_argument(
+        '--gui', action='store_true',
+        help='Run with Tkinter graphical interface'
+    )
 
     args = parser.parse_args()
 
@@ -442,7 +437,15 @@ def main():
         apple1.set_pc(addr)
 
     # Run emulator
-    if args.test:
+    if args.gui:
+        try:
+            from gui import Apple1GUI
+            print("Starting graphical interface...")
+            app = Apple1GUI(apple1)
+            app.run()
+        except ImportError as e:
+            print(f"Error loading GUI modules: {e}")
+    elif args.test:
         # Test mode - run briefly and exit
         print("Running in test mode...")
         output = apple1.run_simple("", 10000)
@@ -456,7 +459,6 @@ def main():
             if args.debug:
                 import traceback
                 traceback.print_exc()
-
 
 if __name__ == '__main__':
     main()

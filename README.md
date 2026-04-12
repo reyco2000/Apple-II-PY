@@ -1,6 +1,7 @@
 # Apple I Emulator (Python)
 
-A Python implementation of the Apple I computer emulator, ported from [jscrane/Apple1](https://github.com/jscrane/Apple1).
+A Python implementation of the Apple I computer emulator.
+Inspired by [jscrane/Apple1](https://github.com/jscrane/Apple1).
 
 ## Overview
 
@@ -10,7 +11,7 @@ The Apple I was Steve Wozniak's first computer, introduced in 1976. This emulato
 - **4KB-48KB RAM** - Configurable memory size
 - **Woz Monitor ROM** - Original system monitor by Steve Wozniak
 - **Integer BASIC** - Optional BASIC interpreter
-- **Terminal Display** - 40-column text display
+- **Terminal Display** - 40-column text display via terminal OR Tkinter graphical composite display
 - **Keyboard Input** - Full keyboard emulation
 
 ## Requirements
@@ -50,7 +51,22 @@ python apple1.py --ram 32
 --run ADDR    Start execution at address (hex)
 --debug       Enable debug output
 --test        Run in test mode (non-interactive)
+--gui         Run with Tkinter graphical interface
 ```
+
+### Graphical Interface
+
+To launch the emulator using the authentic 2513 character ROM matrix rendered via Tkinter, start the application with the `--gui` flag:
+
+```bash
+python apple1.py --basic --gui
+```
+
+The graphical interface features a meticulously detailed hardware aesthetic:
+- **CRT Phosphor Glow**: An adjustable rotary knob simulates the bloom and fade of an original CRT screen.
+- **Hardware Power Toggle**: A mechanical elbow/rocker switch with a real-time reactive status LED.
+- **Raster Scanlines**: Precision visual banding mimics the authentic 1976 CRT monitor interlacing.
+- **Paste Code Interface**: A dedicated window allows seamlessly pasting long BASIC or assembly blocks from your host clipboard directly into the Apple I buffer.
 
 ### Using the Woz Monitor
 
@@ -92,12 +108,14 @@ The emulator is structured into several modules:
 
 ```
 apple1.py      - Main emulator and integration
+gui.py         - Tkinter graphical composite display driver
 cpu6502.py     - MOS 6502 CPU emulation
 memory.py      - Memory management (RAM, ROM, devices)
 pia.py         - MC6820 PIA (keyboard/display I/O)
 display.py     - Terminal display emulation
 keyboard.py    - Keyboard input handling
 roms.py        - ROM images (Woz Monitor, BASIC)
+charmap.rom    - Signetics 2513 character generator ROM
 test_apple1.py - Test suite
 ```
 
@@ -157,9 +175,10 @@ python test_apple1.py
 
 ## Credits
 
-- Original Apple I emulator: [jscrane/Apple1](https://github.com/jscrane/Apple1)
+- Based on Apple I emulator: [jscrane/Apple1](https://github.com/jscrane/Apple1)
 - 6502 emulation library: [jscrane/r65emu](https://github.com/jscrane/r65emu)
 - Woz Monitor and Apple I BASIC are original works by Steve Wozniak
+- Vibe coded by Reinaldo Torres https://github.com/reyco2000 using Gemini 3 Pro High. April 2026.
 
 ## License
 
@@ -172,3 +191,4 @@ The original ROMs (Woz Monitor, Integer BASIC) are preserved for historical and 
 - [Apple I Owner's Manual](http://www.applefritter.com/files/a1man.pdf)
 - [6502 Instruction Set Reference](http://www.6502.org/tutorials/6502opcodes.html)
 - [Apple I Replica Project](http://www.applefritter.com/replica)
+- [Sample source code for APPLE I](https://apple1software.com/)
